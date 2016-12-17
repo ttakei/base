@@ -1,0 +1,5 @@
+#!/bin/sh
+
+url="https://admin.thebase.in/items"
+
+curl -G $url -b cookie | perl scrape_items.pl
