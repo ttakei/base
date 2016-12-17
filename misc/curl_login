@@ -1,0 +1,22 @@
+#!/bin/sh
+
+
+if [ "$1" != "" ]; then
+  perl curl_scrape_form.pl "https://admin.thebase.in/users/login"
+  exit
+fi
+
+url="https://admin.thebase.in/users/login?url="
+mail=""
+pass=""
+token_key=$(perl curl_token_key.pl)
+token_fields=$(perl curl_token_fields.pl)
+
+curl -XPOST -v $url \
+-c cookie \
+--data-urlencode '_method=POST' \
+--data-urlencode 'data[_Token][key]='"$token_key" \
+--data-urlencode 'data[User][mail_address]='"$mail" \
+--data-urlencode 'data[User][password]='"$pass" \
+--data-urlencode 'data[_Token][fields]='"$token_fields" \
+--data-urlencode 'data[_Token][unlocked]='
