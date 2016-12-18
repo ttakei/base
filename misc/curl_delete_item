@@ -1,0 +1,22 @@
+#!/bin/sh
+
+if [ $# -lt 1 ]; then
+  echo "usage: $0 <id>" >&2
+  exit 1
+fi
+
+id=$1
+
+url="https://admin.thebase.in/items/delete/$id"
+
+cmd=$(cat << EOC
+curl -G \
+$url \
+-b cookie \
+-c cookie \
+-H 'X-Requested-With: XMLHttpRequest'
+EOC
+)
+
+#echo $cmd
+eval $cmd
