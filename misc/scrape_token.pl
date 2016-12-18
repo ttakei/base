@@ -3,11 +3,14 @@
 use strict;
 use warnings;
 use Web::Scraper;
-use URI;
 use Data::Dumper;
 
-my $url = 'https://admin.thebase.in/users/login';
-my $uri_obj = URI->new($url);
+my $html = "";
+while (<STDIN>) {
+  chomp;
+  $html .= $_;
+}
+
 my $scraper_input= scraper{
     process 'input',
         'input[]' => {
@@ -18,15 +21,19 @@ my $scraper_input= scraper{
     result 'input';
 };
 my $scraper= scraper{
-    process 'form#userLoginForm',
+    process 'form',
         'result' => $scraper_input;
     result 'result';
 };
-my $res = $scraper->scrape($uri_obj);
-# print Dumper $res;
+my $res = $scraper->scrape($html);
+my $key = "";
+my $fields = "";
 foreach (@$res) {
-    if ($_->{'name'} eq 'data[_Token][key]') {
-        print $_->{'value'};
-        exit;
+    if (defined($_->{'name'}) && $_->{'name'} eq 'data[_Token][key]') {
+        $key = $_->{'value'};
+    } elsif (defined($_->{'name'}) && $_->{'name'} eq 'data[_Token][fields]') {
+        $fields = $_->{'value'};
     }
 }
+
+print "$key $fields"

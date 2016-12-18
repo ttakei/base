@@ -3,16 +3,16 @@
 use strict;
 use warnings;
 use Web::Scraper;
-use URI;
 use Data::Dumper;
 
-if (@ARGV < 1) {
-  print STDERR "usage $0 <url>", "\n";
-  exit 1;
+binmode STDIN,  ":utf8";
+
+my $html = "";
+while (<STDIN>) {
+  chomp;
+  $html .= $_;
 }
 
-my $url = shift;
-my $uri_obj = URI->new($url);
 my $scraper_input= scraper{
     process 'input',
         'input[]' => {
@@ -33,5 +33,5 @@ my $scraper= scraper{
         };
     result 'result';
 };
-my $res = $scraper->scrape($uri_obj);
+my $res = $scraper->scrape($html);
 print Dumper $res;
