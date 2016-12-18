@@ -1,0 +1,95 @@
+#!/bin/sh
+
+form_url="https://admin.thebase.in/items/add"
+post_url="https://admin.thebase.in/items/add"
+
+if [ $# -lt 9 ]; then
+  echo "usage: $0 <title> <detail> <price> <stock> <visible> <order_top> <variation> <variation_stock> <file>" >&2
+  exit
+fi
+
+ifs=$IFS
+
+title=$1
+detail=$2
+price=$3
+stock=$4
+visible=$5
+order_top=$6
+variation=$7
+variation_stock=$8
+file=$9
+
+# get token
+token=$(sh curl_token $form_url)
+set -- $token
+token_key=$1
+token_fields=$2
+
+# curl組み立て
+cmd=$(cat << EOC
+curl -XPOST $post_url -v \
+-b cookie \
+-c cookie \
+ --data-urlencode 'data[Item][title]=$title' \
+ --data-urlencode 'data[Item][detail]=$detail' \
+ --data-urlencode 'data[Item][price]=$price' \
+ --data-urlencode 'data[Item][visible]=$visible' \
+ --data-urlencode 'data[Item][order_top]=$order_top' \
+ --data-urlencode '_method=POST' \
+ --data-urlencode 'data[_Token][key]=$token_key' \
+ --data-urlencode 'data[_Token][fields]=$token_fields' \
+ --data-urlencode 'data[_Token][unlocked]='
+EOC
+)
+
+# curl variation項目
+if [ "$variation" = "" ]; then
+  cmd="$cmd --data-urlencode 'data[Item][stock]=$stock'"
+else
+  IFS=","
+  for v in $variation; do
+    IFS=$ifs
+    cmd="$cmd --data-urlencode 'data[Item][variation][]=$v'"
+    IFS=','
+  done
+  for v in $variation_stock; do
+    IFS=$ifs
+    cmd="$cmd --data-urlencode 'data[Item][variation_stock][]=$v'"
+    IFS=','
+  done
+  IFS=$ifs
+fi
+
+# curl file項目
+if [ "$file" != "" ]; then
+  json="{"
+  n=1
+  first=0
+  IFS=','
+  for f in $file; do
+    IFS=$ifs
+    # upload file
+    ret=$(curl_upload_image $f $n)
+    status=$(echo "$ret" | jq -r '.result_data.status')
+    if [ "$status" != "ok" ]; then
+      echo "failed upload file($f): $status $ret" >&2
+      exit 1
+    fi
+    src=$(echo "$ret" | jq -r '.result_data.src')
+    if [ $first -eq 0 ]; then
+      first=1
+    else
+      json="${json},"
+    fi
+    json="${json}\"${n}\":{\"order\":${n},\"src\":\"${src}\",\"status\":\"new\"}"
+    n=$(expr $n + 1)
+    IFS=','
+  done
+  IFS=$ifs
+  json="${json}}"
+  cmd="$cmd --data-urlencode 'data[Item][file_update]=$json'"
+fi
+
+#echo $cmd
+eval $cmd

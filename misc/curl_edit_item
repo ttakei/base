@@ -1,0 +1,17 @@
+#!/bin/sh
+
+url="https://admin.thebase.in/items/edit/4977347"
+
+agent='Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.87 Safari/537.36'
+
+cmd=$(cat << EOC
+curl -G -v \
+-A '$agent' \
+$url \
+-b cookie \
+-c cookie
+EOC
+)
+
+# echo $cmd
+eval $cmd
