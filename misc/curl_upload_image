@@ -1,0 +1,26 @@
+#!/bin/sh
+
+post_url="https://admin.thebase.in/items/image_upload"
+
+if [ $# -lt 2 ]; then
+  echo "usage: $0 <file> <list_order>" >&2
+  exit
+fi
+
+file=$1
+list_order=$2
+
+cmd=$(cat << EOC
+curl -s \
+-e 'https://admin.thebase.in/items/edit/4977347' \
+-b cookie \
+-c cookie \
+$post_url \
+-H 'X-Requested-With: XMLHttpRequest' \
+-F 'file=@$file' \
+--form-string 'list_order=$list_order'
+EOC
+)
+
+# echo $cmd
+eval $cmd
