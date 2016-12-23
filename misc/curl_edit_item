@@ -1,7 +1,7 @@
 #!/bin/sh
 
 usage () {
-  echo "usage: $0 <id> [-t <title>] [-d <detail>] [-p <price>] [-s <stock>] [-v <visible>] [-o <order_top>] [-a <variation>] [-m <image>]" >&2
+  echo "usage: $0 <id> [-t <title>] [-d <detail>] [-p <price>] [-v <visible>] [-o <order_top>] [-a <variation>] [-m <image>]" >&2
 }
 
 id=${1:-""}
@@ -29,8 +29,6 @@ do
         detail=${OPTARG};;
      p)
         price=${OPTARG};;
-     s)
-        stock=${OPTARG};;
      v)
         visible=${OPTARG};;
      o)
@@ -87,67 +85,80 @@ if [ "$variation_input" != "" ]; then
       eval "$valname=$v_name"
       valname="variation_stock_${v_order}"
       eval "$valname=$v_stock"
+      if [ "$v_name" = "" ]; then
+          valname="variation_del_${v_order}"
+          eval "$valname=1"
+      fi
       variation_num=$(expr $variation_num + 1)
       IFS=','
     done
     IFS=$ifs
 fi
-if [ "$stock" = "" ] || [ "$stock" = "null" ]; then
-    variation_num_target=$(echo $data_target_json | jq -r '{"variation"}' |jq -r .[] | jq length)
-    if [ $variation_num -lt $variation_num_target ]; then
-        variation_num=$variation_num_target
-    fi
-    for n in `seq 1 $variation_num`; do
-        i=$(expr $n - 1)
-        if [ "a"$(eval echo -n \"\$variation_name_$n\") = "a" ]; then
-            v_name=$(echo $data_target_json | jq -r .variation[$i])
-            v_id=$(echo $data_target_json | jq -r .variation_id[$i])
-            v_stock=$(echo $data_target_json | jq -r .variation_stock[$i])
-            eval "variation_name=$v_name"
-            eval "variation_id=$v_id"
-            eval "variation_stock=$v_stock"
-       else
-            eval variation_name=\"\$variation_name_$n\"
-            eval variation_stock=\"\$variation_stock_$n\"
-            variation_id=""
-       fi
-       cmd="$cmd --data-urlencode 'data[Item][variation][$i]=$variation_name'"
-       cmd="$cmd --data-urlencode 'data[Item][variation_stock][$i]=$variation_stock'"
-       if [ "$variation_id" != "" ]; then
-           cmd="$cmd --data-urlencode 'data[Item][variation_id][$i]=$variation_id'"
-       fi
-    done
-else
-  cmd="$cmd --data-urlencode 'data[Item][stock]=$stock'"
+variation_num_target=$(echo $data_target_json | jq -r '{"variation"}' |jq -r .[] | jq length)
+if [ $variation_num -lt $variation_num_target ]; then
+    variation_num=$variation_num_target
 fi
+for n in `seq 1 $variation_num`; do
+    i=$(expr $n - 1)
+    variation_id_target=$(echo $data_target_json | jq -r .variation_id[$i])
+    if [ "a"$(eval echo -n \"\$variation_name_$n\") = "a" ]; then
+        v_name=$(echo $data_target_json | jq -r .variation[$i])
+        v_stock=$(echo $data_target_json | jq -r .variation_stock[$i])
+        eval "variation_name=$v_name"
+        eval "variation_stock=$v_stock"
+        variation_id=$variation_id_target
+    else
+        eval variation_name=\"\$variation_name_$n\"
+        eval variation_stock=\"\$variation_stock_$n\"
+        variation_id=""
+    fi
+    if [ $variation_num -eq 1 ]; then
+        cmd="$cmd --data-urlencode 'data[Item][stock]=$variation_stock'"
+        cmd="$cmd --data-urlencode 'data[Item][variation_id][0]=$variation_id_target'"
+        break
+    else
+        if [ "a"$(eval echo -n \"\$variation_del_$n\") != "a" ]; then
+            continue
+        fi
+        cmd="$cmd --data-urlencode 'data[Item][variation][$i]=$variation_name'"
+        cmd="$cmd --data-urlencode 'data[Item][variation_stock][$i]=$variation_stock'"
+        if [ "$variation_id" != "" ]; then
+            cmd="$cmd --data-urlencode 'data[Item][variation_id][$i]=$variation_id'"
+        fi
+    fi
+done
 
 # image
 image_num=0
 if [ "$image_input" != "" ]; then
-  first=0
-  IFS=','
-  for img in $image_input; do
-    IFS=$ifs
-    img_order=$(echo $img | awk -F ':' '{print $1}')
-    img_file=$(echo $img | awk -F ':' '{print $2}')
-    # upload file
-    ret=$(curl_upload_image $img_file $img_order)
-    status=$(echo "$ret" | jq -r '.result_data.status')
-    if [ "$status" != "ok" ]; then
-      echo "failed upload file($f): $status $ret" >&2
-      exit 1
-    fi
-    # build json
-    valname="image_${img_order}"
-    img_src=$(echo "$ret" | jq -r '.result_data.src')
-    image_str="\\\"${img_order}\\\":{\\\"order\\\":${img_order},\\\"src\\\":\\\"${img_src}\\\",\\\"status\\\":\\\"new\\\"}"
-    eval "image_${img_order}=$image_str"
-    if [ $image_num -lt $img_order ]; then
-        image_num=$img_order
-    fi
+    first=0
     IFS=','
-  done
-  IFS=$ifs
+    for img in $image_input; do
+        IFS=$ifs
+        img_order=$(echo $img | awk -F ':' '{print $1}')
+        img_file=$(echo $img | awk -F ':' '{print $2}')
+        if [ "$img_file" = "" ]; then
+            eval "image_del_${img_order}=1"
+            continue
+        fi
+        # upload file
+        ret=$(curl_upload_image $img_file $img_order)
+        status=$(echo "$ret" | jq -r '.result_data.status')
+        if [ "$status" != "ok" ]; then
+            echo "failed upload file($f): $status $ret" >&2
+            exit 1
+        fi
+        # build json
+        valname="image_${img_order}"
+        img_src=$(echo "$ret" | jq -r '.result_data.src')
+        image_str="\\\"${img_order}\\\":{\\\"order\\\":${img_order},\\\"src\\\":\\\"${img_src}\\\",\\\"status\\\":\\\"new\\\"}"
+        eval "image_${img_order}=$image_str"
+        if [ $image_num -lt $img_order ]; then
+            image_num=$img_order
+        fi
+        IFS=','
+    done
+    IFS=$ifs
 fi
 image_num_target=$(echo $data_target_json | jq -r '{"image"}' |jq -r .[] | jq length)
 if [ $image_num -lt $image_num_target ]; then
@@ -161,7 +172,8 @@ for n in `seq 1 $image_num`; do
     img_src=$(echo $data_target_json | jq -r .image[$i].src)
     img_order=$(echo $data_target_json | jq -r .image[$i].order)
     image_str="\\\"${img_order}\\\":{\\\"order\\\":${img_order},\\\"src\\\":\\\"${img_src}\\\",\\\"id\\\":${img_id},\\\"status\\\":\\\"steady\\\"}"
-    if [ "a"$(eval echo -n \"\$image_$n\") != "a" ]; then
+    if [ "a"$(eval echo -n \"\$image_$n\") != "a" ] || \
+       [ "a"$(eval echo -n \"\$image_del_$n\") != "a" ]; then
         if [ $image_del_first -eq 1 ]; then
             image_del="$img_id"
             image_del_first=0
