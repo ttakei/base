@@ -1,22 +1,52 @@
 #!/bin/sh
 
-if [ $# -lt 10 ]; then
-  echo "usage: $0 <id> <title> <detail> <price> <stock> <visible> <order_top> <variation> <variation_stock> <file>" >&2
-  exit
+usage () {
+  echo "usage: $0 <id> [-t <title>] [-d <detail>] [-p <price>] [-s <stock>] [-v <visible>] [-o <order_top>] [-a <variation>] [-m <image>]" >&2
+}
+
+id=${1:-""}
+if [ "$id" = "" ]; then
+  usage
+  exit 1
 fi
+shift
+
+# 既存データ取得
+data_target_json=$(curl_get_item $id)
+title=$(echo $data_target_json | jq '{"data[Item][title]"}' |jq -r .[])
+detail=$(echo $data_target_json | jq '{"data[Item][detail]"}' |jq -r .[])
+price=$(echo $data_target_json | jq '{"data[Item][price]"}' |jq -r .[])
+visible=$(echo $data_target_json | jq '{"data[Item][visible]"}' |jq -r .[])
+order_top=$(echo $data_target_json | jq '{"data[Item][order_top]"}' |jq -r .[])
+stock=$(echo $data_target_json | jq '{"data[Item][stock]"}' |jq -r .[])
+
+while getopts t:d:p:s:v:o:a:i:f:m: opt
+do
+    case "${opt}" in
+     t)
+        title=${OPTARG};;
+     d)
+        detail=${OPTARG};;
+     p)
+        price=${OPTARG};;
+     s)
+        stock=${OPTARG};;
+     v)
+        visible=${OPTARG};;
+     o)
+        order_top=${OPTARG};;
+     a)
+        variation_input=${OPTARG};;
+     m)
+        image_input=${OPTARG};;
+     *)
+        usage
+        exit 1
+        ;;
+    esac
+done
 
 ifs=$IFS
-
-id=$1
-title=$2
-detail=$3
-price=$4
-stock=$5
-visible=$6
-order_top=$7
-variation=$8
-variation_stock=$9
-file=${10}
 
 form_url="https://admin.thebase.in/items/edit/$id"
 post_url="https://admin.thebase.in/items/edit/$id"
@@ -44,53 +74,120 @@ curl -XPOST $post_url -v \
 EOC
 )
 
-# curl variation項目
-if [ "$variation" = "" ]; then
-  cmd="$cmd --data-urlencode 'data[Item][stock]=$stock'"
+# variation
+variation_num=0
+if [ "$variation_input" != "" ]; then
+    IFS=','
+    for v in $variation_input; do
+      IFS=$ifs
+      v_order=$(echo $v | awk -F ':' '{print $1}')
+      v_name=$(echo $v | awk -F ':' '{print $2}')
+      v_stock=$(echo $v | awk -F ':' '{print $3}')
+      valname="variation_name_${v_order}"
+      eval "$valname=$v_name"
+      valname="variation_stock_${v_order}"
+      eval "$valname=$v_stock"
+      variation_num=$(expr $variation_num + 1)
+      IFS=','
+    done
+    IFS=$ifs
+fi
+if [ "$stock" = "" ] || [ "$stock" = "null" ]; then
+    variation_num_target=$(echo $data_target_json | jq -r '{"variation"}' |jq -r .[] | jq length)
+    if [ $variation_num -lt $variation_num_target ]; then
+        variation_num=$variation_num_target
+    fi
+    for n in `seq 1 $variation_num`; do
+        i=$(expr $n - 1)
+        if [ "a"$(eval echo -n \"\$variation_name_$n\") = "a" ]; then
+            v_name=$(echo $data_target_json | jq -r .variation[$i])
+            v_id=$(echo $data_target_json | jq -r .variation_id[$i])
+            v_stock=$(echo $data_target_json | jq -r .variation_stock[$i])
+            eval "variation_name=$v_name"
+            eval "variation_id=$v_id"
+            eval "variation_stock=$v_stock"
+       else
+            eval variation_name=\"\$variation_name_$n\"
+            eval variation_stock=\"\$variation_stock_$n\"
+            variation_id=""
+       fi
+       cmd="$cmd --data-urlencode 'data[Item][variation][$i]=$variation_name'"
+       cmd="$cmd --data-urlencode 'data[Item][variation_stock][$i]=$variation_stock'"
+       if [ "$variation_id" != "" ]; then
+           cmd="$cmd --data-urlencode 'data[Item][variation_id][$i]=$variation_id'"
+       fi
+    done
 else
-  IFS=","
-  for v in $variation; do
-    IFS=$ifs
-    cmd="$cmd --data-urlencode 'data[Item][variation][]=$v'"
-    IFS=','
-  done
-  for v in $variation_stock; do
-    IFS=$ifs
-    cmd="$cmd --data-urlencode 'data[Item][variation_stock][]=$v'"
-    IFS=','
-  done
-  IFS=$ifs
+  cmd="$cmd --data-urlencode 'data[Item][stock]=$stock'"
 fi
 
-# curl file項目
-if [ "$file" != "" ]; then
-  json="{"
-  n=1
+# image
+image_num=0
+if [ "$image_input" != "" ]; then
   first=0
   IFS=','
-  for f in $file; do
+  for img in $image_input; do
     IFS=$ifs
+    img_order=$(echo $img | awk -F ':' '{print $1}')
+    img_file=$(echo $img | awk -F ':' '{print $2}')
     # upload file
-    ret=$(curl_upload_image $f $n)
+    ret=$(curl_upload_image $img_file $img_order)
     status=$(echo "$ret" | jq -r '.result_data.status')
     if [ "$status" != "ok" ]; then
       echo "failed upload file($f): $status $ret" >&2
       exit 1
     fi
-    src=$(echo "$ret" | jq -r '.result_data.src')
-    if [ $first -eq 0 ]; then
-      first=1
-    else
-      json="${json},"
+    # build json
+    valname="image_${img_order}"
+    img_src=$(echo "$ret" | jq -r '.result_data.src')
+    image_str="\\\"${img_order}\\\":{\\\"order\\\":${img_order},\\\"src\\\":\\\"${img_src}\\\",\\\"status\\\":\\\"new\\\"}"
+    eval "image_${img_order}=$image_str"
+    if [ $image_num -lt $img_order ]; then
+        image_num=$img_order
     fi
-    json="${json}\"${n}\":{\"order\":${n},\"src\":\"${src}\",\"status\":\"new\"}"
-    n=$(expr $n + 1)
     IFS=','
   done
   IFS=$ifs
-  json="${json}}"
-  cmd="$cmd --data-urlencode 'data[Item][file_update]=$json'"
+fi
+image_num_target=$(echo $data_target_json | jq -r '{"image"}' |jq -r .[] | jq length)
+if [ $image_num -lt $image_num_target ]; then
+    image_num=$image_num_target
+fi
+image_del=""
+image_del_first=1
+for n in `seq 1 $image_num`; do
+    i=$(expr $n - 1)
+    img_id=$(echo $data_target_json | jq -r .image[$i].id)
+    img_src=$(echo $data_target_json | jq -r .image[$i].src)
+    img_order=$(echo $data_target_json | jq -r .image[$i].order)
+    image_str="\\\"${img_order}\\\":{\\\"order\\\":${img_order},\\\"src\\\":\\\"${img_src}\\\",\\\"id\\\":${img_id},\\\"status\\\":\\\"steady\\\"}"
+    if [ "a"$(eval echo -n \"\$image_$n\") != "a" ]; then
+        if [ $image_del_first -eq 1 ]; then
+            image_del="$img_id"
+            image_del_first=0
+        else
+            image_del="${image_del},$img_id"
+        fi
+    else
+        eval "image_$n=$image_str"
+    fi
+done
+json="{"
+first=1
+for i in `seq 1 $image_num`; do
+    valname="image_$i"
+    if [ $first -eq 1 ]; then
+        json="$json"$(eval echo -n \"\$$valname\")
+        first=0
+    else
+        json="$json,"$(eval echo -n \"\$$valname\")
+    fi
+done
+json="${json}}"
+cmd="$cmd --data-urlencode 'data[Item][file_update]=$json'"
+if [ "$image_del" != "" ]; then
+    cmd="$cmd --data-urlencode 'data[Item][file_del]=[${image_del}]'"
 fi
 
-#echo $cmd
+echo $cmd
 eval $cmd

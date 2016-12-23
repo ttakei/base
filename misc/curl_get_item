@@ -1,0 +1,12 @@
+#!/bin/sh
+
+if [ "$1" = "" ]; then
+  echo "usage: $0 <id>" >&2
+  exit 1
+fi
+
+id=$1
+url="https://admin.thebase.in/items/edit/$id"
+
+curl -s -G $url -b cookie -c cookie | perl scrape_item.pl
+#curl -s -G $url -b cookie -c cookie
