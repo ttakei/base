@@ -1,0 +1,27 @@
+#!/bin/sh
+
+form_url="https://admin.thebase.in/users/login"
+post_url="https://admin.thebase.in/users/login?url="
+
+if [ "$1" != "" ]; then
+  perl curl_scrape_form.pl "$form_url"
+  exit
+fi
+
+mail=""
+pass=""
+
+token=$(sh curl_token $form_url)
+set -- $token
+token_key=$1
+token_fields=$2
+
+curl -XPOST -sS $post_url \
+-v \
+-c cookie \
+--data-urlencode '_method=POST' \
+--data-urlencode 'data[_Token][key]='"$token_key" \
+--data-urlencode 'data[User][mail_address]='"$mail" \
+--data-urlencode 'data[User][password]='"$pass" \
+--data-urlencode 'data[_Token][fields]='"$token_fields" \
+--data-urlencode 'data[_Token][unlocked]='
