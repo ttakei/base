@@ -11,7 +11,7 @@ if [ "$id" = "" ]; then
 fi
 shift
 
-# $B4{B8%G!<%?<hF@(B
+# 既存データ取得
 data_target_json=$(curl_get_item $id)
 title=$(echo $data_target_json | jq '{"data[Item][title]"}' |jq -r .[])
 detail=$(echo $data_target_json | jq '{"data[Item][detail]"}' |jq -r .[])
@@ -55,7 +55,7 @@ set -- $token
 token_key=$1
 token_fields=$2
 
-# curl$BAH$_N)$F(B
+# curl組み立て
 cmd=$(cat << EOC
 curl -XPOST $post_url -v \
 -b cookie \

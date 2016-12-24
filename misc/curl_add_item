@@ -26,7 +26,7 @@ set -- $token
 token_key=$1
 token_fields=$2
 
-# curl$BAH$_N)$F(B
+# curl組み立て
 cmd=$(cat << EOC
 curl -XPOST $post_url -v \
 -b cookie \
@@ -43,7 +43,7 @@ curl -XPOST $post_url -v \
 EOC
 )
 
-# curl variation$B9`L\(B
+# curl variation項目
 if [ "$variation" = "" ]; then
   cmd="$cmd --data-urlencode 'data[Item][stock]=$stock'"
 else
@@ -61,7 +61,7 @@ else
   IFS=$ifs
 fi
 
-# curl file$B9`L\(B
+# curl file項目
 if [ "$file" != "" ]; then
   json="{"
   n=1
